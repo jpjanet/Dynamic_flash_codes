@@ -4,9 +4,11 @@ function [theta, xi, alpha] = groupseval2(t,z,dotz,ddotz,phi,dotphi,C_l)
 %  The input consists of the current time t, state vector z, as well as 
 %  some derivatives. As the system posed here is index 1 and semi-explicit,
 %  the terms in the derivative are not used later.
+%  Because not all terms are needed here, this does not return the full
+%  list of groupings that are given in Appendix B.2. 
 global Nc
-[ Psi_l dPsi_ldM dPsi_ldP  ddPsi_lddM ddPsi_ldMdP ddPsi_lddP ] = PSIL( z(2*Nc + 1),z(2*Nc + 5),C_l);
-[ K dKdT dKdP ddKddT ddKdTdP ddKddP ] = VLEFUN(z(2*Nc + 4),z(2*Nc + 5));
+[ ~, dPsi_ldM, dPsi_ldP,  ddPsi_lddM, ddPsi_ldMdP, ddPsi_lddP ] = PSIL( z(2*Nc + 1),z(2*Nc + 5),C_l);
+[ K, dKdT, dKdP, ddKddT, ddKdTdP, ddKddP ] = VLEFUN(z(2*Nc + 4),z(2*Nc + 5));
 
 
 theta1 = z(Nc + 1:2*Nc) - z(1:Nc);

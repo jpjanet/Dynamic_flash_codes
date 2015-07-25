@@ -1,15 +1,16 @@
 
-function [tt,x,y,M,L,V,T,P,F,w,sol_t] = s2_explicit_function(tspan,jtest,Stats, integrator, testcase,  tol,clock,clock_reps,gain)
+function [tt,Mi,x,y,Ml,Mv,M,L,V,T,P,Pout,F,w,rho_R,sol_t] = s1_explicit_function(tspan,jtest,Stats, integrator, testcase, tol,clock,clock_reps,gain)
 %This function runs the simulation specified in the inputs using the 
-% system 2 equations.
+% system 1 equations.
 %   The input is defined in the dynamic_flash_mainfile.m script
 %   The outputs are the various state varaibles as vectors at the times
 %   specified in the vector tt.
 
-global Nc C_l
+global Nc C_l C_v
 Nc = 4;   % Number of speices
+
 %% Print the problem details to terminal
-disp(['System 2. Solving with tol = ',num2str(tol),'. Test case = ',num2str(testcase),'. Integrator = ',integrator])
+disp(['System 1. Solving with tol = ',num2str(tol),'. Test case = ',num2str(testcase),'. Integrator = ',integrator])
 if clock
     disp(['Timer is on with reps = ',num2str(clock_reps)])
 end
@@ -44,29 +45,31 @@ Tref = 366.5; % Reference T in K
 P0 = 6.89; % Initial pressure in  Bar(a)
 Pout0 =  1; % Initial external pressue in Bar (a)
 PSI0 = 0.1219; % Initial guess from source
-phi0 = [w0;F0];
 t = 0; % Initial time
+CT = 1.5; % volume, m3
+phi0 = [F0*w0;CT;Pout0];
 
 % Call the Rachford-Rice functions
 if clock
     tic
-    for i =1:clock_reps % Repeat the timer if desired
-        [z0, dotz0, C_l, C_v, ~, ierr ] = s2_initial_condition_function(Tref,phi0,P0,Pout0,Critical_props,PSI0);
+    for i = 1: clock_reps % Repeat the timer if desired
+        [z0, dotz0,CT, C_l, C_v, rho_R, ierr ] = s1_initial_condition_function(Tref,w0,F0,P0,Pout0,Critical_props,PSI0);
     end
     init_t = toc;
     init_t = init_t/clock_reps; % Repeat the timer if desired
     disp(['Initial conditions found in ',num2str(init_t),' seconds'])
 else
-    [z0, dotz0, C_l, C_v, ~, ierr ] = s2_initial_condition_function(Tref,phi0,P0,Pout0,Critical_props,PSI0);
+    [z0, dotz0,CT, C_l, C_v, rho_R, ierr ] = s1_initial_condition_function(Tref,w0,F0,P0,Pout0,Critical_props,PSI0);
 end
+
 
 if (ierr == 0) % check inital condition set-up
     disp('Successful steady-state conditions calculated by Rachford-Rice routine')
-    normEr = norm(SYSTEM2(t,z0,dotz0,phi0,C_l));
+    normEr = norm(SYSTEM1(t,z0,dotz0,phi0, rho_R,C_l,C_v));
     disp(['Error at t = 0 is ',num2str(normEr)]);
 else
     disp('Unsuccesful steady-state condition calculation')
-    normEr = norm(SYSTEM2(t,z0,dotz0,phi0,C_l));
+    normEr = norm(SYSTEM1(t,z0,dotz0,phi0, rho_R,C_l,C_v));
     disp(['Error at t = 0 is ',num2str(normEr)]);
     disp('Please ensure operation in two-phase region at t = 0')
 end
@@ -75,57 +78,38 @@ end
 
 %% External function wrappers
 
-
 % reform as function of X
-x0 = [z0(1:2*Nc + 2);z0(2*Nc + 5)];
-
+x0 = z0([(1:3*Nc + 5),(3*Nc + 7)]);
 
 
 % Apply controls and Inhomogenieties
 if testcase ==1
     Tcon = @(t,X) (TcontrolX_varying(t,X,Tref));
-    phi = @(t) (s2_phi(t,w0,F0,@FeedFucntion));
+    phifun = @(t) (s1_phi(t,F0,w0,CT,Pout0,@FeedFucntion));
 elseif testcase == 2
     Tcon = @(t,X) (TcontrolX(t,X,Tref));
-    phi = @(t) (s2_phi(t,w0,F0,@FeedFucntion_varying));
+    phifun = @(t) (s1_phi(t,F0,w0,CT,Pout0,@FeedFucntion_varying));
 elseif testcase == 3
-    LTarget = x0(2*Nc + 2);
-    Tcon = @(t,X) Tcontrol_v(t,X,Tref,LTarget,gain,2);
-    phi = @(t) (s2_phi(t,w0,F0,@FeedFucntion_varying));
+    LTarget = x0(3*Nc + 4);
+    Tcon = @(t,X) Tcontrol_v(t,X,Tref,LTarget,gain,1);
+    phifun = @(t) (s1_phi(t,F0,w0,CT,Pout0,@FeedFucntion_varying));
 else
     disp('Error: testcase undefined')
     return
 end
 
 
-
-
-
-% Apply V control
-Vcon = @(t,x) (VcontrolX(t,x,Pout0,C_v));
-
-
-
-
 % system equations
-System2_Explicit_RHS = @(t,x) (SYSTEM2_E_RHS(t,x,Tcon,Vcon,phi,C_l));
-
-% Mass matrix
-System2_Explicit_M =  @(t,x)(SYSTEM2_E_M());
-
-% Mass matrrix is constant
-M = System2_Explicit_M(0,x0);
+System1_Explicit_RHS = @(t,x) (SYSTEM1_E_RHS(t,x,Tcon,phifun,rho_R,C_l,C_v));
 
 % Jacobian
-System2_Explicit_J = @(t,x) (SYSTEM2_E_J(t,x,Tcon,Vcon, phi));
-
-
+System1_Explicit_J = @(t,x) (SYSTEM1_E_J(t,x,Tcon,phifun,rho_R));
 
 
 % Test explicit system Jacobian:
 if (jtest)
-    F_handle = @(x)(System2_Explicit_RHS(0,x));
-    J = System2_Explicit_J(0,x0);
+    F_handle = @(x)(System1_Explicit_RHS(0,x));
+    J = System1_Explicit_J(0,x0);
     delta = 0.00001;
     nJ = numjac(F_handle,x0,delta);
     G = J - nJ;
@@ -137,47 +121,46 @@ if (jtest)
     colorbar
 end
 
+% Mass matrix
+System1_Explicit_M =  @(t,x)(SYSTEM1_E_M(t,x,Tcon));
+
+% Mass matrrix is constant
+M = System1_Explicit_M(0,x0);
+
+
 
 % Set up ODE options
-options = odeset('Mass',M,'Jacobian',System2_Explicit_J,'Stats',Stats,'AbsTol',tol,'RelTol',1E-10);
-
-
-
-
+options = odeset('Mass',M,'Jacobian',System1_Explicit_J,'Stats',Stats,'AbsTol',tol,'RelTol',1E-10);
 
 if ~clock
     clock_reps = 1;
     sol_t = 'clock_off';
 end
-
 % Solve DAE
-disp(['Hand-off to solver sucessful. Repetitions = ', num2str(clock_reps),'. Sysem size  = ',num2str(length(x0)), '. Solver output = '])
+disp(['Hand-off to solver successful. Repetitions = ', num2str(clock_reps),'. System size  = ',num2str(length(x0)), '. Solver output = '])
 fprintf('\n')
 
-
-
-% Solve DAE
-if strcmp(integrator,'ode15s')
+if strcmp(integrator,'ode15s');
     if clock
         tic
         for i = 1:clock_reps
-            [tt,X] = ode15s(System2_Explicit_RHS,tspan,x0,options);
+            [tt,X] = ode15s(System1_Explicit_RHS,tspan,x0,options);
         end
-        sol_t =toc;
+        sol_t = toc;
         sol_t=sol_t/clock_reps;
     else
-        [tt,X] = ode15s(System2_Explicit_RHS,tspan,x0,options);
+        [tt,X] = ode15s(System1_Explicit_RHS,tspan,x0,options);
     end
 elseif strcmp(integrator,'ode23t');
     if clock
         tic
         for i = 1:clock_reps
-            [tt,X] = ode23t(System2_Explicit_RHS,tspan,x0,options);
+            [tt,X] = ode23t(System1_Explicit_RHS,tspan,x0,options);
         end
-        sol_t =toc;
+        sol_t = toc;
         sol_t=sol_t/clock_reps;
     else
-        [tt,X] = ode23t(System2_Explicit_RHS,tspan,x0,options);
+        [tt,X] = ode23t(System1_Explicit_RHS,tspan,x0,options);
     end
 else
     disp('Invalid integrator')
@@ -189,14 +172,9 @@ if clock
 else
     disp(['Solver complete'])
 end
-
 fprintf('\n')
 
 % Post-Process
-[x,y,M,L,V,T,P,F,w]  = s2_X_to_variable(tt,X,Tcon,Vcon,phi);
-
-if ~clock
-    sol_t = 'clock_off';
-end
+[Mi,x,y,Ml,Mv,M,L,V,T,P,Pout,F,w] = s1_X_to_variable(tt,X,Tcon,phifun);
 
 end

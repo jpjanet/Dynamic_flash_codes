@@ -19,13 +19,10 @@ z = [x(1:3*Nc + 5);T;x(3*Nc + 6)]; % combined control
 
 %% Assemble Groupings
 
-%theta1 = -z(Nc + 1:2*Nc).*dKdT;
 theta2 = -z(Nc + 1:2*Nc).*dKdP;
 xi1 = z(3*Nc + 1)*(Rho_l^(-2))*dRho_ldx';
 xi2 = z(3*Nc + 2)*(Rho_v^(-2))*dRho_vdy';
-%a1 = z(3*Nc + 1)*(Rho_l^(-2))*dRho_ldT + z(3*Nc + 2)*(Rho_v^(-2))*dRho_vdT;
 a2 = z(3*Nc + 1)*(Rho_l^(-2))*dRho_ldP + z(3*Nc + 2)*(Rho_v^(-2))*dRho_vdP;
-%a3 = sum(dKdT.*z(Nc + 1:2*Nc));
 a4 = sum(dKdP.*z(Nc + 1:2*Nc));
 
 
@@ -55,6 +52,6 @@ J44 = [zeros(1,2), 1, zeros(1,3);...
     zeros(1,5),  a4];
 
 J = [J11, J12, J13, J14; J21, J22, J23, J24; J31, J32, J33, J34; J41, J42, J43, J44];
-%disp(['Jacobian condition = ',num2str(cond(J),1)])
+
 
 end
